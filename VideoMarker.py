@@ -1,3 +1,4 @@
+import os
 import csv
 import cv2
 import numpy as np
@@ -74,14 +75,79 @@ class VideoPlayer:
         pass
 
 
+class Recorder:
+    def __init__(self, path):
+        self.path = path
+        self.stat = self.Load()
+
+    def Index(self, idx):
+        if not self.stat or idx < self.stat[0][0]:
+            return -1
+        for idx_stat, (idx2, group_id2) in enumerate(reversed(self.stat)):
+            if idx2 <= idx:
+                return len(self.stat) - idx_stat - 1
+
+    def Insert(self, idx, group_id):
+        idx_stat = self.Index(idx)
+        item = (idx, group_id)
+        if idx_stat == -1:
+            self.stat.insert(0, item)
+        elif idx == self.stat[idx_stat][0]:
+            self.stat[idx_stat] = item
+        else:
+            self.stat.insert(idx_stat + 1, item)
+        self.Update()
+
+    def Remove(self, idx):
+        idx_stat = self.Index(idx)
+        if idx_stat >= 0:
+            self.stat.pop(idx_stat)
+        self.Update()
+
+    def Stat(self, idx):
+        # 计算时长统计
+        group_id = 0
+        count = [0] * 4  # [总共, 手动, 自动, 停车]
+        idx_stat = self.Index(idx)
+        if idx_stat >= 0:
+            for (idx2, group_id2), (idx3, group_id3) in zip(self.stat[:idx_stat], self.stat[1:]):
+                count[0] += idx3 - idx2
+                count[group_id2] += idx3 - idx2
+            idx2, group_id = self.stat[idx_stat]
+            count[0] += idx - idx2
+            count[group_id] += idx - idx2
+        return group_id, count
+
+    def Update(self):
+        """保存到CSV文件"""
+        stat2 = []
+        for idx, group_id in self.stat:
+            if not stat2 or stat2[-1][1] != group_id:
+                stat2.append((idx, group_id))
+        self.stat = stat2
+        with open(self.path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['idx', 'group'])
+            writer.writerows(self.stat)
+
+    def Load(self):
+        """从CSV文件中载入"""
+        try:
+            with open(self.path, 'r', newline='') as f:
+                return [(int(idx), int(group_id)) for idx, group_id in list(csv.reader(f))[1:]]
+        except Exception:
+            return []
+
+
 class VideoMarker(VideoPlayer):
     def __init__(self, path):
         VideoPlayer.__init__(self, path)
 
         # 计时统计
-        self.time_stat = []
+        self.recorder = Recorder(os.path.splitext(path)[0] + '.csv')
 
         # 文本显示位置
+        self.mask_size = (320, 140)
         self.text_pos = (10, 30)
         self.stats_pos = (10, 60)
 
@@ -90,70 +156,59 @@ class VideoMarker(VideoPlayer):
         cv2.imshow('Video Marker', self.frame)
 
     def OnKeyPress(self, key):
-        if key in [ord('1'), ord('2'), ord('3')]:
+        if key == 0x2e0000:  # DEL键
+            self.recorder.Remove(self.idx)
+        elif key in [ord('1'), ord('2'), ord('3')]:
             # 记录当前时间点
             group_id = key - ord('0')
-            self.time_stat.append((self.idx, group_id))
-            self.time_stat.sort()
-            self.SaveCsvFile()
+            self.recorder.Insert(self.idx, group_id)
 
     def FormatTime(self, frames):
         """将帧数转换为时间字符串 (HH:MM:SS.NNN)"""
         seconds = frames / self.fps
         seconds_int = int(seconds)
         minutes, secs = divmod(seconds_int, 60)
-        ms = int((seconds - seconds_int) * 1000)
-        return f'{minutes:02d}:{secs:02d}.{ms:03d}'
+        ms = int((seconds - seconds_int) * 10)
+        return f'{minutes:02d}:{secs:02d}.{ms:01d}'
 
-    def FormatStatTexts(self):
+    def FormatPercent(self, frames, total):
+        return f'{self.FormatTime(frames)} ({frames / (total or 1):.1%})'
+
+    def FormatStat(self):
         """更新计时统计"""
-        if not self.time_stat:
-            return []
-
-        # 计算时长统计
-        self.time_stat.sort()
-        stat = [0, 0, 0]
-        for (idx_last, group_id), (idx, _) in zip(self.time_stat, self.time_stat[1:] + [(self.idx, -1)]):
-            if idx > self.idx:
-                stat[group_id - 1] += self.idx - idx_last
-                break
-            else:
-                stat[group_id - 1] += idx - idx_last
+        group_id, count = self.recorder.Stat(self.idx)
+        if not count[0]:
+            return ''
 
         # 计算时长统计百分比
-        stat_texts = []
-        total = self.idx - self.time_stat[0][0] or 1
-        for i, frames in enumerate(stat):
-            if frames > 0:
-                stat_text = f'Status {i + 1}: {self.FormatTime(frames)} ({frames / total: .2%})'
-                stat_texts.append(stat_text)
+        labels = ['Hands-on', 'Hands-off', 'Parking']
+        stat_text = (
+            f'{self.FormatTime(count[0])} ({labels[group_id - 1]})\n'
+            f'{labels[1]} Time: {self.FormatPercent(count[2] + count[3], count[0])}\n'
+            f'{labels[0]} Time: {self.FormatPercent(count[1], count[0])}\n'
+            f'{labels[2]} Time: {self.FormatPercent(count[3], count[0])}\n'
+        )
 
-        return stat_texts
+        return stat_text
 
     def DisplayStats(self):
         """在屏幕上显示时间信息"""
-        time_text = f'{self.FormatTime(self.idx)}/{self.FormatTime(self.frame_count - 1)}'
-        cv2.putText(self.frame, time_text, self.text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        # 在屏幕上显示各状态的统计时长
-        for i, stats_text in enumerate(self.FormatStatTexts()):
-            cv2.putText(self.frame, stats_text, (self.stats_pos[0], self.stats_pos[1] + 30 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
-    def SaveCsvFile(self):
-        """保存到CSV文件"""
-        with open('groups.csv', 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['帧序号', '组别'])
-            writer.writerows(self.time_stat)
+        w, h = self.text_pos
+        texts = self.FormatStat().splitlines()
+        if texts:
+            cv2.rectangle(self.frame, (0, 0, *self.mask_size), (0, 0, 0), -1)
+        for i, text in enumerate(texts):
+            scale = 0.7 if i == 0 else 0.5
+            thickness = 2 if i == 0 else 1
+            cv2.putText(self.frame, text, (w, h + 30 * i), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 255, 0), thickness)
 
     def CreateTextVideo(self, output_path):
         """创建只显示文本的视频"""
-        width, height = (600, 400)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, self.fps, (width, height))
+        out = cv2.VideoWriter(output_path, fourcc, self.fps, self.mask_size)
 
         for i in range(self.frame_count):
-            self.frame = np.zeros((height, width, 3), dtype=np.uint8)  # 创建黑色背景
+            self.frame = np.zeros((self.mask_size[1], self.mask_size[0], 3), dtype=np.uint8)  # 创建黑色背景
             self.idx = i
             self.DisplayStats()  # 显示时间信息
             out.write(self.frame)  # 写入视频文件
