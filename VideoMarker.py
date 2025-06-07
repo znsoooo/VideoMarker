@@ -4,34 +4,25 @@ import numpy as np
 
 
 class VideoPlayer:
-    def __init__(self, video_path):
-        self.video_path = video_path
+    def __init__(self, path):
+        self.path = path
 
         # 初始化视频捕获对象
-        self.cap = cv2.VideoCapture(video_path)
+        self.cap = cv2.VideoCapture(path)
 
         # 检查视频是否成功打开
         if not self.cap.isOpened():
-            print(f'无法打开视频文件: {video_path}')
+            print(f'无法打开视频文件: {path}')
             exit()
 
         # 获取视频属性
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.frame = self.cap.read()[1]
 
         # 初始化变量
         self.idx = 0
         self.paused = False
-
-        # 计时统计
-        self.time_stat = []
-
-        # 文本显示位置
-        self.text_pos = (10, 30)
-        self.stats_pos = (10, 60)
 
     def MoveFrame(self, count=1):
         """向后移动指定帧数"""
@@ -62,24 +53,49 @@ class VideoPlayer:
         elif key == 0x270000:  # 右箭头
             return self.MoveFrame(1 if self.paused else int(5 * self.fps))
 
-        elif key in [ord('1'), ord('2'), ord('3')]:
-            # 记录当前时间点
-            group_id = key - ord('0')
-            self.time_stat.append((self.idx, group_id))
-            self.time_stat.sort()
-            self.SaveCsvFile()
+        else:
+            self.OnKeyPress(key)
 
         return self.MoveFrame(not self.paused)
 
     def Run(self):
         """视频播放主循环"""
         while self.GetNextFrame():
-            self.DisplayStats()
-            cv2.imshow('Video Player', self.frame)
+            self.ShowFrame()
 
         # 释放资源
         self.cap.release()
         cv2.destroyAllWindows()
+
+    def ShowFrame(self):
+        cv2.imshow('Video Player', self.frame)
+
+    def OnKeyPress(self, key):
+        pass
+
+
+class VideoMarker(VideoPlayer):
+    def __init__(self, path):
+        VideoPlayer.__init__(self, path)
+
+        # 计时统计
+        self.time_stat = []
+
+        # 文本显示位置
+        self.text_pos = (10, 30)
+        self.stats_pos = (10, 60)
+
+    def ShowFrame(self):
+        self.DisplayStats()
+        cv2.imshow('Video Marker', self.frame)
+
+    def OnKeyPress(self, key):
+        if key in [ord('1'), ord('2'), ord('3')]:
+            # 记录当前时间点
+            group_id = key - ord('0')
+            self.time_stat.append((self.idx, group_id))
+            self.time_stat.sort()
+            self.SaveCsvFile()
 
     def FormatTime(self, frames):
         """将帧数转换为时间字符串 (HH:MM:SS.NNN)"""
@@ -149,8 +165,8 @@ class VideoPlayer:
 
 if __name__ == '__main__':
     video_path = 'vtest.avi'
-    player = VideoPlayer(video_path)
-    player.Run()  # 运行视频播放器
+    video = VideoMarker(video_path)
+    video.Run()  # 运行视频播放器
 
     # 创建文本视频
-    player.CreateTextVideo('text_video.mp4')
+    video.CreateTextVideo('text_video.mp4')
