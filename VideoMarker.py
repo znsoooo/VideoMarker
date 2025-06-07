@@ -27,7 +27,7 @@ class VideoPlayer:
 
     def MoveFrame(self, count=1):
         """向后移动指定帧数"""
-        new_idx = max(0, min(self.frame_count - 1, self.idx + count))
+        new_idx = max(0, min(self.frame_count - 1, self.idx + int(count)))
         if new_idx == self.idx:
             pass
         elif new_idx == self.idx + 1:
@@ -42,18 +42,27 @@ class VideoPlayer:
         """处理按键事件"""
         key = cv2.waitKeyEx(int(1000 / self.fps))
 
-        if key == 27:  # ESC键退出
+        keymap = {
+            0x250000:  -5 * self.fps,  # LEFT
+            0x270000:  +5 * self.fps,  # RIGHT
+            0x210000: -60 * self.fps,  # PAGE_UP
+            0x220000: +60 * self.fps,  # PAGE_DOWN
+            0x240000: -self.frame_count,  # HOME
+            0x230000: +self.frame_count,  # END
+        }
+
+        if key == -1:
+            pass
+        elif key == 27 or key == ord('q'):  # ESC/Q键退出
             return False
-
-        elif key == ord(' '):  # 空格键：暂停/继续
+        elif key == ord(' '):  # 空格键: 暂停/继续
             self.paused = not self.paused
-
-        elif key == 0x250000:  # 左箭头
-            return self.MoveFrame(-1 if self.paused else int(-5 * self.fps))
-
-        elif key == 0x270000:  # 右箭头
-            return self.MoveFrame(1 if self.paused else int(5 * self.fps))
-
+        elif self.paused and key == 0x250000:  # 左箭头
+            return self.MoveFrame(-1)
+        elif self.paused and key == 0x270000:  # 右箭头
+            return self.MoveFrame(+1)
+        elif key in keymap:
+            return self.MoveFrame(keymap[key])
         else:
             self.OnKeyPress(key)
 
@@ -162,6 +171,8 @@ class VideoMarker(VideoPlayer):
             # 记录当前时间点
             group_id = key - ord('0')
             self.recorder.Insert(self.idx, group_id)
+        else:
+            print(f'OnKeyPress: {key} ({hex(key)})')
 
     def FormatTime(self, frames):
         """将帧数转换为时间字符串 (HH:MM:SS.NNN)"""
