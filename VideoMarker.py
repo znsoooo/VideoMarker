@@ -2,6 +2,7 @@ import os
 import csv
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 
 class VideoPlayer:
@@ -156,9 +157,13 @@ class VideoMarker(VideoPlayer):
         self.recorder = Recorder(os.path.splitext(path)[0] + '.csv')
 
         # 文本显示位置
-        self.mask_size = (320, 140)
+        self.mask_size = (280, 140)
         self.text_pos = (10, 30)
         self.stats_pos = (10, 60)
+
+        font_path = 'C:/Windows/Fonts/msyh.ttc'
+        self.font1 = ImageFont.truetype(font_path, 28)
+        self.font2 = ImageFont.truetype(font_path, 20)
 
     def ShowFrame(self):
         self.DisplayStats()
@@ -192,12 +197,12 @@ class VideoMarker(VideoPlayer):
             return ''
 
         # 计算时长统计百分比
-        labels = ['Hands-on', 'Hands-off', 'Parking']
+        labels = ['接管', '脱手', '停车']
         stat_text = (
             f'{self.FormatTime(count[0])} ({labels[group_id - 1]})\n'
-            f'{labels[1]} Time: {self.FormatPercent(count[2] + count[3], count[0])}\n'
-            f'{labels[0]} Time: {self.FormatPercent(count[1], count[0])}\n'
-            f'{labels[2]} Time: {self.FormatPercent(count[3], count[0])}\n'
+            f'{labels[1]}时间：{self.FormatPercent(count[2] + count[3], count[0])}\n'
+            f'{labels[0]}时间：{self.FormatPercent(count[1], count[0])}\n'
+            f'{labels[2]}时间：{self.FormatPercent(count[3], count[0])}\n'
         )
 
         return stat_text
@@ -206,12 +211,16 @@ class VideoMarker(VideoPlayer):
         """在屏幕上显示时间信息"""
         w, h = self.text_pos
         texts = self.FormatStat().splitlines()
-        if texts:
-            cv2.rectangle(self.frame, (0, 0, *self.mask_size), (0, 0, 0), -1)
+        if not texts:
+            return
+
+        text_img = Image.new('RGB', self.mask_size, (0, 0, 0))
+        draw = ImageDraw.Draw(text_img)
         for i, text in enumerate(texts):
-            scale = 0.7 if i == 0 else 0.5
-            thickness = 2 if i == 0 else 1
-            cv2.putText(self.frame, text, (w, h + 30 * i), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 255, 0), thickness)
+            font = self.font1 if i == 0 else self.font2
+            draw.text((w, h + 30 * i - font.size), text, font=font, fill=(0, 255, 0))
+        x, y = self.mask_size
+        self.frame[:y, :x] = np.array(text_img)
 
     def CreateTextVideo(self, output_path):
         """创建只显示文本的视频"""
