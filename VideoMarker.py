@@ -228,9 +228,10 @@ class VideoMarker(VideoPlayer):
         x, y = self.mask_size
         self.frame[:y, :x] = np.array(text_img)
 
-    def CreateTextVideo(self, output_path):
+    def SaveTextVideo(self):
         """创建只显示文本的视频"""
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        output_path = os.path.splitext(self.path)[0] + '.stat.mp4'
         out = cv2.VideoWriter(output_path, fourcc, self.fps, self.mask_size)
 
         for i in range(self.frame_count):
@@ -241,13 +242,11 @@ class VideoMarker(VideoPlayer):
 
         # 释放资源
         out.release()
-        print(f'文本视频已保存到: {output_path}')
+        print(f'文本视频已保存到: "{output_path}"')
 
 
 if __name__ == '__main__':
     video_path = 'vtest.avi'
     video = VideoMarker(video_path)
     video.Run()  # 运行视频播放器
-
-    # 创建文本视频
-    video.CreateTextVideo('text_video.mp4')
+    video.SaveTextVideo()
