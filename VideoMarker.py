@@ -1,5 +1,7 @@
 import os
 import csv
+import time
+
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -25,6 +27,7 @@ class VideoPlayer:
         # 初始化变量
         self.idx = 0
         self.paused = False
+        self.clock = time.time()
 
     def MoveFrame(self, count=1):
         """向后移动指定帧数"""
@@ -41,7 +44,9 @@ class VideoPlayer:
 
     def GetNextFrame(self):
         """处理按键事件"""
-        key = cv2.waitKeyEx(int(1000 / self.fps))
+        self.clock += 1 / self.fps
+        delay = self.clock - time.time()
+        key = cv2.waitKeyEx(max(int(1000 * delay), 1))
 
         keymap = {
             0x250000:  -5 * self.fps,  # LEFT
