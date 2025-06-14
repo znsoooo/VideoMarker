@@ -122,7 +122,7 @@ class Recorder:
     def Stat(self, idx):
         # 计算时长统计
         group_id = 0
-        count = [0] * 4  # [总共, 手动, 自动, 停车]
+        count = [0] * 5  # [总共, 手动, 自动, 停车, 结束]
         idx_stat = self.Index(idx)
         if idx_stat >= 0:
             for (idx2, group_id2), (idx3, group_id3) in zip(self.stat[:idx_stat], self.stat[1:]):
@@ -177,7 +177,7 @@ class VideoMarker(VideoPlayer):
     def OnKeyPress(self, key):
         if key == 0x2e0000:  # DEL键
             self.recorder.Remove(self.idx)
-        elif key in [ord('1'), ord('2'), ord('3')]:
+        elif ord('1') <= key <= ord('4'):
             # 记录当前时间点
             group_id = key - ord('0')
             self.recorder.Insert(self.idx, group_id)
@@ -185,7 +185,7 @@ class VideoMarker(VideoPlayer):
             print(f'OnKeyPress: {key} ({hex(key)})')
 
     def FormatTime(self, frames):
-        """将帧数转换为时间字符串 (HH:MM:SS.NNN)"""
+        """将帧数转换为时间字符串 (MM:SS.NNN)"""
         seconds = frames / self.fps
         seconds_int = int(seconds)
         minutes, secs = divmod(seconds_int, 60)
@@ -202,12 +202,13 @@ class VideoMarker(VideoPlayer):
             return ''
 
         # 计算时长统计百分比
-        labels = ['接管', '脱手', '停车']
+        labels = ['接管', '脱手', '停车', '结束']
+        total = count[0] - count[4]
         stat_text = (
-            f'{self.FormatTime(count[0])} ({labels[group_id - 1]})\n'
-            f'{labels[1]}时间：{self.FormatPercent(count[2] + count[3], count[0])}\n'
-            f'{labels[0]}时间：{self.FormatPercent(count[1], count[0])}\n'
-            f'{labels[2]}时间：{self.FormatPercent(count[3], count[0])}\n'
+            f'{self.FormatTime(total)} ({labels[group_id - 1]})\n'
+            f'{labels[1]}时间：{self.FormatPercent(count[2] + count[3], total)}\n'
+            f'{labels[0]}时间：{self.FormatPercent(count[1], total)}\n'
+            f'{labels[2]}时间：{self.FormatPercent(count[3], total)}\n'
         )
 
         return stat_text
