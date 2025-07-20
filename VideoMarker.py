@@ -38,10 +38,12 @@ class VideoPlayer:
         if new_idx == self.idx:
             pass
         elif new_idx == self.idx + 1:
-            self.frame = self.cap.read()[1]
+            ret, frame = self.cap.read()
+            self.frame = frame if ret else self.frame * 0
         else:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, new_idx)
-            self.frame = self.cap.read()[1]
+            ret, frame = self.cap.read()
+            self.frame = frame if ret else self.frame * 0
         self.idx = new_idx
         return self.frame is not None
 
