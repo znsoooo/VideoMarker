@@ -7,6 +7,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
+__title__ = 'Video Marker'
+
+
 class VideoPlayer:
     def __init__(self, path):
         self.path = path
@@ -170,9 +173,25 @@ class VideoMarker(VideoPlayer):
         self.font1 = ImageFont.truetype(font_path, 28)
         self.font2 = ImageFont.truetype(font_path, 20)
 
+        title = f'{os.path.basename(path)} - {__title__}'
+        self.SetTitle(title)
+
+    def SetTitle(self, title):
+        cv2.imshow(__title__, self.frame)
+        try:
+            title_encoded = title.encode('ansi').decode()
+            cv2.setWindowTitle(__title__, title_encoded)
+        except UnicodeError:
+            try:
+                import win32gui
+                hwnd = win32gui.FindWindow(0, __title__)
+                win32gui.SetWindowText(hwnd, title)
+            except Exception:
+                pass
+
     def ShowFrame(self):
         self.DisplayStats()
-        cv2.imshow('Video Marker', self.frame)
+        cv2.imshow(__title__, self.frame)
 
     def OnKeyPress(self, key):
         if key == 0x2e0000:  # DEL键
