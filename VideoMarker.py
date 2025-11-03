@@ -1,4 +1,4 @@
-import os
+import os.path as osp
 import csv
 import time
 
@@ -13,6 +13,11 @@ __title__ = 'Video Marker'
 class VideoPlayer:
     def __init__(self, path):
         self.path = path
+        self.filename = osp.splitext(osp.basename(path))[0]
+        self.title = 'Video Player'
+
+        self.drawing = False
+        self.x1 = self.x2 = self.y1 = self.y2 = -1
 
         # 初始化视频捕获对象
         self.cap = cv2.VideoCapture(path)
@@ -83,16 +88,41 @@ class VideoPlayer:
         """视频播放主循环"""
         while self.GetNextFrame():
             self.ShowFrame()
-
-        # 释放资源
         self.cap.release()
         cv2.destroyAllWindows()
 
     def ShowFrame(self):
-        cv2.imshow('Video Player', self.frame)
+        frame = self.frame.copy()
+        color = [(0, 255, 0), (0, 0, 255)][self.drawing]
+        cv2.rectangle(frame, (self.x1, self.y1), (self.x2, self.y2), color, 1)
+        cv2.imshow(self.title, frame)
+        cv2.setMouseCallback(self.title, self.OnMouse)
 
     def OnKeyPress(self, key):
         pass
+
+    def OnMouse(self, evt, x, y, flags, param):
+        if evt == cv2.EVENT_LBUTTONDOWN:
+            self.drawing = True
+            self.x1, self.y1 = x, y
+            self.x2, self.y2 = x, y
+
+        elif evt == cv2.EVENT_MOUSEMOVE:
+            if self.drawing:
+                self.x2, self.y2 = x, y
+
+        elif evt == cv2.EVENT_LBUTTONUP:
+            self.drawing = False
+            self.x2, self.y2 = x, y
+            self.SaveRect(self.x1, self.y1, self.x2, self.y2)
+
+    def SaveRect(self, x1, y1, x2, y2):
+        if x1 != x2 and y1 != y2:
+            x1, x2 = sorted([x1, x2])
+            y1, y2 = sorted([y1, y2])
+            rect = self.frame[y1: y2, x1: x2]
+            save_path = f'{self.filename}_n{self.idx}_x{x1}_y{y1}_w{x2 - x1}_h{y2 - y1}.png'
+            cv2.imwrite(save_path, rect)
 
 
 class Recorder:
@@ -162,9 +192,10 @@ class Recorder:
 class VideoMarker(VideoPlayer):
     def __init__(self, path):
         VideoPlayer.__init__(self, path)
+        self.title = __title__
 
         # 计时统计
-        self.recorder = Recorder(os.path.splitext(path)[0] + '.csv')
+        self.recorder = Recorder(osp.splitext(path)[0] + '.csv')
 
         # 文本显示位置
         self.mask_size = (280, 140)
@@ -175,7 +206,7 @@ class VideoMarker(VideoPlayer):
         self.font1 = ImageFont.truetype(font_path, 28)
         self.font2 = ImageFont.truetype(font_path, 20)
 
-        title = f'{os.path.basename(path)} - {__title__}'
+        title = f'{osp.basename(path)} - {__title__}'
         self.SetTitle(title)
 
     def SetTitle(self, title):
@@ -193,7 +224,7 @@ class VideoMarker(VideoPlayer):
 
     def ShowFrame(self):
         self.DisplayStats()
-        cv2.imshow(__title__, self.frame)
+        super().ShowFrame()
 
     def OnKeyPress(self, key):
         if key == 0x2e0000:  # DEL键
@@ -252,7 +283,7 @@ class VideoMarker(VideoPlayer):
     def SaveTextVideo(self):
         """创建只显示文本的视频"""
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        output_path = os.path.splitext(self.path)[0] + '.stat.mp4'
+        output_path = osp.splitext(self.path)[0] + '.stat.mp4'
         out = cv2.VideoWriter(output_path, fourcc, self.fps, self.mask_size)
 
         for i in range(self.frame_count):
